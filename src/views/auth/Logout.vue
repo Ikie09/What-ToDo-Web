@@ -1,56 +1,69 @@
 <template>
-    <div class="logout-page">
-        <div class="logout-box">
-            <h2>🔒 Logging out...</h2>
-            <p>Please wait while we sign you out.</p>
+    <div class="auth-page">
+        <div class="auth-card card" role="status">
+            <BrandLogo :size="44" />
+            <h1>Signing you out…</h1>
+            <p class="muted">{{ message }}</p>
         </div>
     </div>
 </template>
 
 <script setup>
-    import { onMounted } from 'vue'
-    import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import BrandLogo from '../../components/BrandLogo.vue'
+import { useAuthStore } from '../../stores/auth'
+import { useSyncStore } from '../../stores/sync'
+import { useTodosStore } from '../../stores/todos'
+import { useNotesStore } from '../../stores/notes'
+import { useMeetingsStore } from '../../stores/meetings'
+import { useCategoriesStore } from '../../stores/categories'
 
-    const router = useRouter()
+const router = useRouter()
+const auth = useAuthStore()
+const sync = useSyncStore()
+const message = ref('Saving any pending changes first.')
 
-    onMounted(async () => {
-    // Clear storage
-    localStorage.clear()
-    sessionStorage.clear()
+// Per-user data only: theme, sidebar and reminder preferences are kept.
+const USER_KEYS = [
+    'cache_todos', 'cache_notes', 'cache_categories', 'cache_meetings',
+    'sync_queue', 'sync_last_time', 'sync_temp_id_counter', 'reminders_notified'
+]
 
-    // Redirect to login after short delay
-    setTimeout(() => {
-        router.replace('/auth/login')
-    }, 1200)
-    })
+onMounted(async () => {
+    if (sync.pendingCount > 0) {
+        const pushed = await sync.flush()
+        if (!pushed && !window.confirm('You have changes that have not synced yet. Signing out will discard them. Sign out anyway?')) {
+            router.replace('/')
+            return
+        }
+    }
+
+    auth.logout()
+    USER_KEYS.forEach((key) => localStorage.removeItem(key))
+    // Stores re-read their (now empty) cache, so the next account never sees this one's data.
+    ;[useTodosStore(), useNotesStore(), useMeetingsStore(), useCategoriesStore(), sync].forEach((s) => s.$reset())
+    router.replace('/auth/login')
+})
 </script>
 
 <style scoped>
-    .logout-page {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-        background-color: #f8fafc;
-    }
+.auth-page {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    padding: 1rem;
+}
 
-    .logout-box {
-        text-align: center;
-        background: white;
-        padding: 2rem 2.5rem;
-        border-radius: 8px;
-        box-shadow: 0 5px 25px rgba(0, 0, 0, 0.06);
-        max-width: 420px;
-    }
+.auth-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    width: min(380px, 100%);
+    padding: 2rem;
+    text-align: center;
+}
 
-    .logout-box h2 {
-        font-size: 1.6rem;
-        margin-bottom: 0.5rem;
-        color: #1f2937;
-    }
-
-    .logout-box p {
-        color: #64748b;
-        font-size: 1rem;
-    }
+h1 { font-size: 1.25rem; }
 </style>

@@ -1,0 +1,132 @@
+/*
+ * Design tokens. Palette is anchored on jungle green #29AB87.
+ * Light theme is the default; dark overrides live under html[data-theme="dark"]
+ * (set by the inline script in index.html and by useTheme()).
+ */
+:root {
+    /* Jungle green scale */
+    --jg-50: #ECF8F3;
+    --jg-100: #D3F0E4;
+    --jg-200: #A8E0C8;
+    --jg-300: #74CBA8;
+    --jg-400: #46B88F;
+    --jg-500: #29AB87;
+    --jg-600: #1F8A6C;
+    --jg-700: #1A6F58;
+    --jg-800: #175947;
+    --jg-900: #134A3B;
+    --jg-950: #0A2B22;
+
+    color-scheme: light;
+
+    /* Surfaces */
+    --bg: #F3F8F5;
+    --surface: #FFFFFF;
+    --surface-2: #ECF8F3;
+    --surface-3: #D3F0E4;
+    --border: #D5E6DE;
+    --border-strong: #B4CFC3;
+
+    /* Text */
+    --text: #0F2A21;
+    --text-muted: #4B6A5E;
+    --text-faint: #6B8579;
+
+    /* Brand */
+    --primary: #1A6F58;          /* buttons: white text = 6:1 */
+    --primary-hover: #175947;
+    --on-primary: #FFFFFF;
+    --primary-soft: #D3F0E4;     /* tinted backgrounds, active nav */
+    --primary-text: #1A6F58;     /* links / accents on surfaces */
+    --accent: #29AB87;           /* decorative: icons, chart series, rings */
+    --ring: #29AB87;
+
+    /* Sidebar */
+    --sidebar-bg: #0A2B22;
+    --sidebar-text: #BFE6D6;
+    --sidebar-text-strong: #FFFFFF;
+    --sidebar-hover: rgba(255, 255, 255, 0.08);
+    --sidebar-active: rgba(70, 184, 143, 0.22);
+    --sidebar-border: rgba(255, 255, 255, 0.10);
+
+    /* Semantic */
+    --danger: #B42318;
+    --danger-soft: #FEE4E2;
+    --warning: #93370D;
+    --warning-soft: #FEF0C7;
+    --success-soft: #D3F0E4;
+
+    /* Priority + status badges (bg / text) */
+    --prio-low-bg: #D3F0E4;
+    --prio-low-text: #134A3B;
+    --prio-med-bg: #FEF0C7;
+    --prio-med-text: #7A2E0E;
+    --prio-high-bg: #FEE4E2;
+    --prio-high-text: #912018;
+    --col-todo: #5B7A6D;
+    --col-doing: #B54708;
+    --col-done: #1F8A6C;
+
+    /* Shape + elevation */
+    --radius-sm: 8px;
+    --radius: 12px;
+    --radius-lg: 16px;
+    --shadow-sm: 0 1px 2px rgba(10, 43, 34, 0.06);
+    --shadow: 0 1px 3px rgba(10, 43, 34, 0.08), 0 8px 24px rgba(10, 43, 34, 0.06);
+    --shadow-lg: 0 12px 40px rgba(10, 43, 34, 0.18);
+
+    --font: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --sidebar-w: 248px;
+    --sidebar-w-collapsed: 72px;
+    --topbar-h: 64px;
+}
+
+html[data-theme="dark"] {
+    color-scheme: dark;
+
+    --bg: #07130F;
+    --surface: #0D1F18;
+    --surface-2: #14302A;
+    --surface-3: #1B3F36;
+    --border: #1E3A31;
+    --border-strong: #2C5346;
+
+    --text: #E6F4EE;
+    --text-muted: #9DB8AC;
+    --text-faint: #7C9A8D;
+
+    --primary: #46B88F;
+    --primary-hover: #74CBA8;
+    --on-primary: #06231A;
+    --primary-soft: #14302A;
+    --primary-text: #74CBA8;
+    --accent: #46B88F;
+    --ring: #74CBA8;
+
+    --sidebar-bg: #050E0B;
+    --sidebar-text: #9DB8AC;
+    --sidebar-text-strong: #E6F4EE;
+    --sidebar-hover: rgba(255, 255, 255, 0.06);
+    --sidebar-active: rgba(70, 184, 143, 0.20);
+    --sidebar-border: rgba(255, 255, 255, 0.08);
+
+    --danger: #F97066;
+    --danger-soft: #3A1512;
+    --warning: #FDB022;
+    --warning-soft: #36260A;
+    --success-soft: #14302A;
+
+    --prio-low-bg: #14302A;
+    --prio-low-text: #A8E0C8;
+    --prio-med-bg: #36260A;
+    --prio-med-text: #FDB022;
+    --prio-high-bg: #3A1512;
+    --prio-high-text: #FDA29B;
+    --col-todo: #9DB8AC;
+    --col-doing: #FDB022;
+    --col-done: #46B88F;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.45), 0 8px 24px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
+}

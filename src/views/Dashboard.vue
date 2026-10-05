@@ -1,278 +1,206 @@
 <template>
-    <div class="container">
-        <!-- Header -->
+    <div class="page">
         <div class="page-header">
-            <h2 class="title">📊 Welcome back, Admin!</h2>
-            <p class="subtitle">{{ today }}</p>
+            <div>
+                <h2 class="page-title">{{ greeting }}</h2>
+                <p class="page-sub">{{ today }}</p>
+            </div>
+            <RouterLink to="/todos" class="btn"><Plus :size="18" aria-hidden="true" /> Add a todo</RouterLink>
         </div>
 
-        <!-- Stats Cards Grid -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <h3>👥 Users</h3>
-                <p>1,240</p>
-            </div>
-            <div class="stat-card">
-                <h3>🛒 Sales</h3>
-                <p>328</p>
-            </div>
-            <div class="stat-card">
-                <h3>💰 Revenue</h3>
-                <p>$43,520</p>
-            </div>
-            <div class="stat-card">
-                <h3>📋 Tasks</h3>
-                <p>12</p>
-            </div>
-            <div class="stat-card">
-                <h3>✉️ Messages</h3>
-                <p>34</p>
-            </div>
-            <div class="stat-card">
-                <h3>👀 Visitors</h3>
-                <p>5,678</p>
-            </div>
-        </div>
-
-        <!-- Chart Section -->
-        <section class="dashboard-section">
-            <h3>📈 Monthly Sales</h3>
-            <div class="chart-placeholder">[Chart Placeholder]</div>
-        </section>
-
-        <!-- Task Progress -->
-        <section class="dashboard-section">
-            <h3>✅ Task Progress</h3>
-            <div class="progress-bar">
-                <div class="progress-fill" :style="{ width: '65%' }">65%</div>
+        <section class="stats" aria-label="Summary">
+            <div v-for="s in stats" :key="s.label" class="stat card">
+                <span class="stat-icon" :class="s.tone" aria-hidden="true"><component :is="s.icon" :size="20" /></span>
+                <div>
+                    <p class="stat-value">{{ s.value }}</p>
+                    <p class="stat-label">{{ s.label }}</p>
+                </div>
             </div>
         </section>
 
-        <!-- Recent Activity Table -->
-        <section class="dashboard-section card">
-            <h3>📌 Recent Activity</h3>
-            <div class="table-responsive">
-                <input type="text" v-model="search" placeholder="Search" class="search-input" />
-                <EasyDataTable :headers="headers" :items="filteredItems" :sortable="true" rows-per-page="5" table-class="custom-activity-table" />
-            </div>
+        <div class="grid">
+            <section class="card">
+                <h3 class="card-title">Progress</h3>
+                <div class="progress" role="progressbar" :aria-valuenow="progressPct" aria-valuemin="0" aria-valuemax="100" aria-label="Todos completed">
+                    <div class="progress-fill" :style="{ width: progressPct + '%' }"></div>
+                </div>
+                <p class="muted progress-text">{{ todos.completedCount }} of {{ todos.openCount + todos.completedCount }} todos done ({{ progressPct }}%)</p>
+
+                <h3 class="card-title chart-title">Open todos by priority</h3>
+                <apexchart v-if="todos.openCount > 0" type="donut" height="240" :options="chartOptions" :series="chartSeries" />
+                <EmptyState v-else :icon="ListChecks" title="All clear" text="No open todos right now." />
+            </section>
+
+            <section class="card">
+                <div class="card-head">
+                    <h3 class="card-title">Upcoming meetings</h3>
+                    <RouterLink to="/meetings">View all</RouterLink>
+                </div>
+                <EmptyState v-if="nextMeetings.length === 0" :icon="CalendarDays" title="No meetings coming up" text="Scheduled meetings will show here." />
+                <ul v-else class="meetings">
+                    <li v-for="m in nextMeetings" :key="m.id">
+                        <span class="m-date" aria-hidden="true">
+                            <strong>{{ new Date(m.startsAt).getDate() }}</strong>
+                            {{ new Date(m.startsAt).toLocaleDateString(undefined, { month: 'short' }) }}
+                        </span>
+                        <span class="m-info">
+                            <span class="m-title">{{ m.title }}</span>
+                            <span class="muted">{{ formatTime(m.startsAt) }} – {{ formatTime(m.endsAt) }}<template v-if="m.location"> · {{ m.location }}</template></span>
+                        </span>
+                    </li>
+                </ul>
+            </section>
+        </div>
+
+        <section class="card">
+            <h3 class="card-title">Recent activity</h3>
+            <EmptyState v-if="activity.length === 0" :icon="Activity" title="Nothing yet" text="Create a todo, note or meeting and it will appear here." />
+            <ul v-else class="feed">
+                <li v-for="a in activity" :key="a.key">
+                    <span class="feed-icon" aria-hidden="true"><component :is="a.icon" :size="16" /></span>
+                    <span class="feed-text"><strong>{{ a.kind }}</strong> {{ a.title }}</span>
+                    <time class="muted" :datetime="a.at">{{ formatDateTime(a.at) }}</time>
+                </li>
+            </ul>
         </section>
     </div>
 </template>
 
 <script setup>
-    import { ref, computed } from 'vue'
-    import EasyDataTable from 'vue3-easy-data-table'
-    import 'vue3-easy-data-table/dist/style.css'
+import { computed, defineAsyncComponent, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
+import { Plus, ListChecks, CheckCheck, AlarmClock, StickyNote, CalendarDays, Activity } from 'lucide-vue-next'
+import EmptyState from '../components/EmptyState.vue'
+import { useAuthStore } from '../stores/auth'
+import { useTodosStore } from '../stores/todos'
+import { useNotesStore } from '../stores/notes'
+import { useMeetingsStore } from '../stores/meetings'
+import { useCategoriesStore } from '../stores/categories'
+import { useTheme } from '../composables/useTheme'
+import { formatTime, formatDateTime } from '../utils/dates'
 
-    const today = new Date().toLocaleDateString(undefined, {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    })
+// Charts are only needed here, so keep the library out of the main bundle.
+const apexchart = defineAsyncComponent(() => import('vue3-apexcharts'))
 
-    const headers = [
-        { text: 'User', value: 'user', sortable: true },
-        { text: 'Action', value: 'action', sortable: true },
-        { text: 'Time', value: 'time', sortable: true }
-    ]
+const auth = useAuthStore()
+const todos = useTodosStore()
+const notes = useNotesStore()
+const meetings = useMeetingsStore()
+const categories = useCategoriesStore()
+const { resolved } = useTheme()
 
-    const items = ref([
-        { user: 'Alice', action: 'Created new order', time: '2 hours ago' },
-        { user: 'Bob', action: 'Updated profile', time: '5 hours ago' },
-        { user: 'Jane', action: 'Completed a task', time: '1 day ago' },
-        { user: 'Mark', action: 'Deleted a file', time: '3 days ago' },
-        { user: 'Lina', action: 'Uploaded document', time: '4 days ago' },
-        { user: 'Tom', action: 'Reset password', time: '5 days ago' }
-    ])
+onMounted(() => {
+    todos.fetchAll()
+    notes.fetchAll()
+    meetings.fetchAll()
+    categories.fetchAll()
+})
 
-    const search = ref('')
+const greeting = computed(() => {
+    const hour = new Date().getHours()
+    const part = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+    const name = auth.user?.email?.split('@')[0]
+    return name ? `${part}, ${name}` : part
+})
 
-    const filteredItems = computed(() => {
-    if (!search.value.trim()) {
-        return items.value
+const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+
+const stats = computed(() => [
+    { label: 'Open todos', value: todos.openCount, icon: ListChecks, tone: 'tone-green' },
+    { label: 'Done', value: todos.completedCount, icon: CheckCheck, tone: 'tone-green' },
+    { label: 'Overdue', value: todos.overdueCount, icon: AlarmClock, tone: todos.overdueCount ? 'tone-red' : 'tone-green' },
+    { label: 'Upcoming meetings', value: meetings.upcoming.length, icon: CalendarDays, tone: 'tone-green' },
+    { label: 'Notes', value: notes.items.length, icon: StickyNote, tone: 'tone-green' }
+])
+
+const progressPct = computed(() => {
+    const total = todos.openCount + todos.completedCount
+    return total === 0 ? 0 : Math.round((todos.completedCount / total) * 100)
+})
+
+const nextMeetings = computed(() => meetings.upcoming.slice(0, 4))
+
+const chartSeries = computed(() => {
+    const p = todos.byPriority
+    return [p.High || 0, p.Medium || 0, p.Low || 0]
+})
+
+const chartOptions = computed(() => {
+    const dark = resolved.value === 'dark'
+    return {
+        labels: ['High', 'Medium', 'Low'],
+        colors: dark ? ['#F97066', '#FDB022', '#46B88F'] : ['#B42318', '#B54708', '#29AB87'],
+        theme: { mode: dark ? 'dark' : 'light' },
+        chart: { background: 'transparent', foreColor: dark ? '#9DB8AC' : '#4B6A5E', fontFamily: 'Inter Variable, system-ui, sans-serif' },
+        stroke: { width: 2, colors: [dark ? '#0D1F18' : '#FFFFFF'] },
+        legend: { position: 'bottom' },
+        dataLabels: { enabled: false },
+        plotOptions: { pie: { donut: { size: '68%' } } }
     }
-    const s = search.value.toLowerCase()
-    return items.value.filter(
-        (item) =>
-        item.user.toLowerCase().includes(s) ||
-        item.action.toLowerCase().includes(s) ||
-        item.time.toLowerCase().includes(s)
-    )
-    })
+})
+
+const activity = computed(() => {
+    const rows = [
+        ...todos.items.map(t => ({ key: `t${t.id}`, kind: t.status === 'Done' ? 'Completed' : 'Todo', title: t.title, at: t.updatedAt || t.createdAt, icon: ListChecks })),
+        ...notes.items.map(n => ({ key: `n${n.id}`, kind: 'Note', title: n.title, at: n.updatedAt, icon: StickyNote })),
+        ...meetings.items.map(m => ({ key: `m${m.id}`, kind: 'Meeting', title: m.title, at: m.updatedAt, icon: CalendarDays }))
+    ]
+    return rows.filter(r => r.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 8)
+})
 </script>
 
 <style scoped>
-    /* Stats Cards Grid */
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 1rem;
-        margin-bottom: 1rem;
-    }
+.stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 1rem;
+}
 
-    .stat-card {
-        background: #fff;
-        border-radius: 8px;
-        box-shadow:
-            0 1.5px 3px rgba(0, 0, 0, 0.06),
-            0 6px 12px rgba(0, 0, 0, 0.1);
-        padding: 1rem 1.25rem;
-        text-align: center;
-        user-select: none;
-        transition: transform 0.2s ease;
-    }
+.stat { display: flex; align-items: center; gap: 0.9rem; padding: 1rem; }
+.stat-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: var(--radius); }
+.tone-green { color: var(--primary-text); background: var(--primary-soft); }
+.tone-red { color: var(--danger); background: var(--danger-soft); }
+.stat-value { font-size: 1.6rem; font-weight: 800; line-height: 1.1; }
+.stat-label { font-size: 0.8rem; color: var(--text-muted); }
 
-    .stat-card:hover {
-        transform: translateY(-5px);
-    }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
 
-    .stat-card h3 {
-        font-size: 1rem;
-        margin-bottom: 0.5rem;
-        color: #444;
-        font-weight: 600;
-    }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; }
+.card-head .card-title { margin-bottom: 1rem; }
+.chart-title { margin-top: 1.5rem; }
 
-    .stat-card p {
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: #111;
-    }
+.progress { height: 12px; overflow: hidden; background: var(--surface-3); border-radius: 999px; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--jg-500), var(--jg-400)); border-radius: 999px; transition: width 0.4s ease; }
+.progress-text { margin-top: 0.5rem; font-size: 0.85rem; }
 
-    /* Sections */
-    .dashboard-section {
-        margin-top: 2rem;
-        user-select: none;
-    }
+.meetings { display: flex; flex-direction: column; gap: 0.75rem; }
+.meetings li { display: flex; align-items: center; gap: 0.85rem; }
+.m-date {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 46px;
+    padding: 0.35rem 0;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--primary-text);
+    background: var(--primary-soft);
+    border-radius: var(--radius-sm);
+}
+.m-date strong { font-size: 1.1rem; line-height: 1.1; }
+.m-info { display: flex; flex-direction: column; min-width: 0; font-size: 0.85rem; }
+.m-title { font-weight: 600; font-size: 0.95rem; }
 
-    .dashboard-section h3 {
-        font-weight: 700;
-        font-size: 1.25rem;
-        margin-bottom: 1rem;
-        color: #222;
-    }
+.feed { display: flex; flex-direction: column; }
+.feed li { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--border); }
+.feed li:first-child { border-top: 0; }
+.feed-icon { display: grid; place-items: center; width: 30px; height: 30px; color: var(--primary-text); background: var(--primary-soft); border-radius: 50%; flex: none; }
+.feed-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed time { font-size: 0.78rem; white-space: nowrap; }
 
-    /* Chart Placeholder */
-    .chart-placeholder {
-        background: #e9efff;
-        height: 200px;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #64748b;
-        font-style: italic;
-        user-select: none;
-    }
-
-    /* Progress Bar */
-    .progress-bar {
-        background: #e0e7ff;
-        height: 28px;
-        border-radius: 8px;
-        overflow: hidden;
-        margin-top: 0.5rem;
-        width: 100%;
-        max-width: 400px;
-        user-select: none;
-    }
-
-    .progress-fill {
-        height: 100%;
-        background: #3b82f6;
-        color: white;
-        font-size: 1rem;
-        font-weight: 700;
-        text-align: center;
-        line-height: 28px;
-        border-radius: 8px;
-        transition: width 0.5s ease;
-    }
-
-    /* Card container for table */
-    .card {
-        background: #ffffff;
-        border-radius: 8px;
-        padding: 2rem;
-    }
-
-    /* Search input modern style */
-    .search-input {
-        width: 100%;
-        max-width: 220px;
-        padding: 0.5rem 1rem;
-        margin-bottom: 1.5rem;
-        background: none;
-        border: 1px solid #d2d6da;
-        border-radius: .375rem;
-        line-height: 1.3;
-    }
-
-    .search-input:focus {
-        outline: none;
-        border-color: #3b82f6;
-    }
-
-    /* Responsive horizontal scroll wrapper */
-    .table-responsive {
-        width: 100%;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch; /* smooth scroll on iOS */
-        border-radius: 8px;
-        box-shadow:0 2px 4px rgba(0,0,0,0.05);
-        background: white;
-        padding: 0.5rem;
-        margin-top: 1rem;
-    }
-
-    /* Table tweaks */
-    .custom-activity-table table {
-        min-width: 600px; /* prevent shrinking on small screens */
-        border-collapse: separate !important; /* keep border-radius if any */
-    }
-
-    /* Table rows */
-    .custom-activity-table tbody tr {
-        transition: background-color 0.25s ease;
-    }
-
-    .custom-activity-table tbody tr:hover {
-        background-color: #d0e2ff;
-        cursor: pointer;
-    }
-
-    /* Responsive adjustments */
-    @media (max-width: 900px) {
-        .dashboard-header {
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .stats-grid {
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-        }
-
-        .progress-bar {
-            max-width: 100%;
-        }
-    }
-
-    @media (max-width: 480px) {
-        .dashboard-container {
-            padding: 1rem;
-        }
-
-        .stat-card h3 {
-            font-size: 0.9rem;
-        }
-
-        .stat-card p {
-            font-size: 1.25rem;
-        }
-
-        .search-input {
-            max-width: 100%;
-        }
-    }
+@media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr; }
+    .feed time { display: none; }
+}
 </style>

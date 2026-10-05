@@ -1,5 +1,18 @@
-# Vue 3 + Vite
+# What To Do
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Todos (list + Kanban board), meetings with notes, and notes — with dictation, reminders, offline support and export. Vue 3 + Vite + Pinia, talking to the `What-To-Do` ASP.NET Core API.
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+## Run it
+
+1. Start the API (`What-To-Do` project, `https://localhost:7242`).
+2. `npm install`
+3. `npm run dev` → http://localhost:5173
+
+Set `VITE_API_BASE_URL` (see `.env.example`) to point at a different API.
+
+## Notes
+
+- Theme: jungle-green palette in `src/assets/theme.css`; light/dark/system via `useTheme()`.
+- Offline: edits made offline are queued (`stores/sync.js`) and pushed to `/api/sync/push` on reconnect.
+- Dictation uses the browser Web Speech API (Chrome/Edge); reminders use the Notification API while the app is open.
+- `npm run build` produces the PWA (service worker included).

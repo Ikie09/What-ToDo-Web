@@ -1,6 +1,11 @@
 import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import '@fontsource-variable/inter'
 import App from './App.vue'
 import router from './router'
-import './assets/style.css';
+import { initTheme } from './composables/useTheme'
+import './assets/theme.css'
+import './assets/base.css'
 
-createApp(App).use(router).mount('#app')
+initTheme()
+createApp(App).use(createPinia()).use(router).mount('#app')

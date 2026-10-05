@@ -1,48 +1,64 @@
 <template>
-    <div class="layout">
-        <!-- Sidebar navigation -->
+    <div class="layout" :class="{ collapsed }">
+        <a class="skip-link" href="#main">Skip to content</a>
+
         <Sidebar />
+        <div v-if="mobileOpen" class="scrim" @click="closeMobile"></div>
 
-        <div class="content-wrapper">
-            <!-- Top navigation bar -->
+        <div class="content">
             <Navbar />
-
-            <!-- Main content area -->
-            <main class="main-content">
+            <main id="main" class="main" tabindex="-1">
                 <router-view />
             </main>
-            <!-- Footer -->
-            <Footer />
         </div>
     </div>
 </template>
 
 <script setup>
-    import Sidebar from '../components/Sidebar.vue'
-    import Navbar from '../components/Navbar.vue'
-    import Footer from '../components/Folder.vue'
+import Sidebar from '../components/Sidebar.vue'
+import Navbar from '../components/Navbar.vue'
+import { useShell } from '../composables/useShell'
+
+const { collapsed, mobileOpen, closeMobile } = useShell()
 </script>
 
 <style scoped>
-    .layout {
-        display: flex;
-        height: 100vh;
-        overflow: hidden;
-    }
+.layout {
+    display: flex;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    background: var(--bg);
+}
 
-    /* Sidebar area */
-    .content-wrapper {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-    }
+.content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
 
-    /* Main scrollable content */
-    .main-content {
-        flex: 1;
-        padding: 1rem;
-        overflow-y: auto;
-        background-color: #f9fafb;
+.main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+}
+
+.main:focus { outline: none; }
+
+.scrim {
+    display: none;
+}
+
+@media (max-width: 900px) {
+    .main { padding: 1rem; }
+
+    .scrim {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        background: rgba(5, 14, 11, 0.55);
     }
+}
 </style>
