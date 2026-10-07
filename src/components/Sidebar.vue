@@ -29,7 +29,9 @@
 
 <script setup>
 import { RouterLink } from 'vue-router'
-import { LayoutDashboard, ListChecks, CalendarDays, StickyNote, Settings, PanelLeftClose, PanelLeftOpen } from 'lucide-vue-next'
+import {
+    LayoutDashboard, ListChecks, CalendarDays, StickyNote, Wallet, ChartNoAxesCombined, Settings, PanelLeftClose, PanelLeftOpen
+} from 'lucide-vue-next'
 import BrandLogo from './BrandLogo.vue'
 import { useShell } from '../composables/useShell'
 
@@ -40,6 +42,8 @@ const items = [
     { to: '/todos', label: 'Todos', icon: ListChecks },
     { to: '/meetings', label: 'Meetings', icon: CalendarDays },
     { to: '/notes', label: 'Notes', icon: StickyNote },
+    { to: '/budget', label: 'Budget', icon: Wallet },
+    { to: '/insights', label: 'Insights', icon: ChartNoAxesCombined },
     { to: '/settings', label: 'Settings', icon: Settings }
 ]
 </script>

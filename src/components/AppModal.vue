@@ -1,5 +1,13 @@
 <template>
-    <dialog ref="dialog" class="modal" :aria-labelledby="titleId" @close="emit('update:open', false)" @click="onBackdropClick">
+    <dialog
+        ref="dialog"
+        class="modal"
+        :style="{ '--modal-width': width }"
+        :aria-labelledby="titleId"
+        @cancel="emit('update:open', false)"
+        @close="emit('update:open', false)"
+        @click="onBackdropClick"
+    >
         <div class="modal-body" @click.stop>
             <header class="modal-header">
                 <h2 :id="titleId">{{ title }}</h2>
@@ -18,7 +26,8 @@ import { X } from 'lucide-vue-next'
 
 const props = defineProps({
     open: { type: Boolean, default: false },
-    title: { type: String, required: true }
+    title: { type: String, required: true },
+    width: { type: String, default: '560px' }
 })
 const emit = defineEmits(['update:open'])
 
@@ -46,7 +55,7 @@ watch(() => props.open, sync)
 
 <style scoped>
 .modal {
-    width: min(560px, calc(100vw - 2rem));
+    width: min(var(--modal-width, 560px), calc(100vw - 2rem));
     max-height: calc(100vh - 2rem);
     padding: 0;
     color: var(--text);

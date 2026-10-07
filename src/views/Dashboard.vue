@@ -31,25 +31,44 @@
                 <EmptyState v-else :icon="ListChecks" title="All clear" text="No open todos right now." />
             </section>
 
-            <section class="card">
-                <div class="card-head">
-                    <h3 class="card-title">Upcoming meetings</h3>
-                    <RouterLink to="/meetings">View all</RouterLink>
-                </div>
-                <EmptyState v-if="nextMeetings.length === 0" :icon="CalendarDays" title="No meetings coming up" text="Scheduled meetings will show here." />
-                <ul v-else class="meetings">
-                    <li v-for="m in nextMeetings" :key="m.id">
-                        <span class="m-date" aria-hidden="true">
-                            <strong>{{ new Date(m.startsAt).getDate() }}</strong>
-                            {{ new Date(m.startsAt).toLocaleDateString(undefined, { month: 'short' }) }}
-                        </span>
-                        <span class="m-info">
-                            <span class="m-title">{{ m.title }}</span>
-                            <span class="muted">{{ formatTime(m.startsAt) }} – {{ formatTime(m.endsAt) }}<template v-if="m.location"> · {{ m.location }}</template></span>
-                        </span>
-                    </li>
-                </ul>
-            </section>
+            <div class="stack">
+                <section class="card">
+                    <div class="card-head">
+                        <h3 class="card-title">Upcoming meetings</h3>
+                        <RouterLink to="/meetings">View all</RouterLink>
+                    </div>
+                    <EmptyState v-if="nextMeetings.length === 0" :icon="CalendarDays" title="No meetings coming up" text="Scheduled meetings will show here." />
+                    <ul v-else class="meetings">
+                        <li v-for="m in nextMeetings" :key="m.id">
+                            <span class="m-date" aria-hidden="true">
+                                <strong>{{ new Date(m.startsAt).getDate() }}</strong>
+                                {{ new Date(m.startsAt).toLocaleDateString(undefined, { month: 'short' }) }}
+                            </span>
+                            <span class="m-info">
+                                <span class="m-title">{{ m.title }}</span>
+                                <span class="muted">{{ formatTime(m.startsAt) }} – {{ formatTime(m.endsAt) }}<template v-if="m.location"> · {{ m.location }}</template></span>
+                            </span>
+                        </li>
+                    </ul>
+                </section>
+
+                <section class="card">
+                    <div class="card-head">
+                        <h3 class="card-title">Spending · {{ monthLabel(thisMonth) }}</h3>
+                        <RouterLink to="/budget">Open budget</RouterLink>
+                    </div>
+                    <EmptyState v-if="spend.expenseCents === 0 && budgetTotalCents === 0" :icon="Wallet" title="No spending yet" text="Log an expense to track your month." />
+                    <template v-else>
+                        <p class="spend-total">{{ money(spend.expenseCents) }}
+                            <span v-if="budgetTotalCents" class="muted"> of {{ money(budgetTotalCents) }} budgeted</span>
+                        </p>
+                        <div v-if="budgetTotalCents" class="progress" role="progressbar" :aria-valuenow="spendPct" aria-valuemin="0" aria-valuemax="100" aria-label="Budget used this month">
+                            <div class="progress-fill" :class="{ over: spendPct >= 100 }" :style="{ width: Math.min(100, spendPct) + '%' }"></div>
+                        </div>
+                        <p class="muted progress-text">Income {{ money(spend.incomeCents) }} · Net {{ money(spend.netCents) }}</p>
+                    </template>
+                </section>
+            </div>
         </div>
 
         <section class="card">
@@ -69,15 +88,19 @@
 <script setup>
 import { computed, defineAsyncComponent, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Plus, ListChecks, CheckCheck, AlarmClock, StickyNote, CalendarDays, Activity } from 'lucide-vue-next'
+import { Plus, ListChecks, CheckCheck, AlarmClock, StickyNote, CalendarDays, Activity, Wallet } from 'lucide-vue-next'
 import EmptyState from '../components/EmptyState.vue'
 import { useAuthStore } from '../stores/auth'
 import { useTodosStore } from '../stores/todos'
 import { useNotesStore } from '../stores/notes'
 import { useMeetingsStore } from '../stores/meetings'
 import { useCategoriesStore } from '../stores/categories'
-import { useTheme } from '../composables/useTheme'
+import { useTransactionsStore } from '../stores/transactions'
+import { useBudgetsStore } from '../stores/budgets'
+import { useChartTheme } from '../composables/useChartTheme'
+import { useCurrency } from '../composables/useCurrency'
 import { formatTime, formatDateTime } from '../utils/dates'
+import { currentMonthKey, monthLabel, summarize, toCents, fromCents } from '../utils/finance'
 
 // Charts are only needed here, so keep the library out of the main bundle.
 const apexchart = defineAsyncComponent(() => import('vue3-apexcharts'))
@@ -87,14 +110,25 @@ const todos = useTodosStore()
 const notes = useNotesStore()
 const meetings = useMeetingsStore()
 const categories = useCategoriesStore()
-const { resolved } = useTheme()
+const transactions = useTransactionsStore()
+const budgets = useBudgetsStore()
+const chart = useChartTheme()
+const { format } = useCurrency()
 
 onMounted(() => {
     todos.fetchAll()
     notes.fetchAll()
     meetings.fetchAll()
     categories.fetchAll()
+    transactions.fetchAll()
+    budgets.fetchAll()
 })
+
+const thisMonth = currentMonthKey()
+const money = (cents) => format(fromCents(cents))
+const spend = computed(() => summarize(transactions.items, thisMonth))
+const budgetTotalCents = computed(() => budgets.items.reduce((sum, b) => sum + toCents(b.monthlyLimit), 0))
+const spendPct = computed(() => budgetTotalCents.value ? Math.round((spend.value.expenseCents / budgetTotalCents.value) * 100) : 0)
 
 const greeting = computed(() => {
     const hour = new Date().getHours()
@@ -126,17 +160,13 @@ const chartSeries = computed(() => {
 })
 
 const chartOptions = computed(() => {
-    const dark = resolved.value === 'dark'
-    return {
+    const c = chart.colors.value
+    return chart.options({
         labels: ['High', 'Medium', 'Low'],
-        colors: dark ? ['#F97066', '#FDB022', '#46B88F'] : ['#B42318', '#B54708', '#29AB87'],
-        theme: { mode: dark ? 'dark' : 'light' },
-        chart: { background: 'transparent', foreColor: dark ? '#9DB8AC' : '#4B6A5E', fontFamily: 'Inter Variable, system-ui, sans-serif' },
-        stroke: { width: 2, colors: [dark ? '#0D1F18' : '#FFFFFF'] },
-        legend: { position: 'bottom' },
-        dataLabels: { enabled: false },
+        colors: [c.danger, c.warning, c.soft],
+        stroke: { width: 2, colors: [c.surface] },
         plotOptions: { pie: { donut: { size: '68%' } } }
-    }
+    })
 })
 
 const activity = computed(() => {
@@ -163,7 +193,11 @@ const activity = computed(() => {
 .stat-value { font-size: 1.6rem; font-weight: 800; line-height: 1.1; }
 .stat-label { font-size: 0.8rem; color: var(--text-muted); }
 
-.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; align-items: start; }
+.stack { display: flex; flex-direction: column; gap: 1.25rem; }
+.spend-total { margin-bottom: 0.6rem; font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.spend-total .muted { font-size: 0.85rem; font-weight: 500; }
+.progress-fill.over { background: var(--danger); }
 
 .card-head { display: flex; align-items: baseline; justify-content: space-between; }
 .card-head .card-title { margin-bottom: 1rem; }
@@ -200,7 +234,7 @@ const activity = computed(() => {
 .feed time { font-size: 0.78rem; white-space: nowrap; }
 
 @media (max-width: 900px) {
-    .grid { grid-template-columns: 1fr; }
+    .grid { grid-template-columns: minmax(0, 1fr); }
     .feed time { display: none; }
 }
 </style>

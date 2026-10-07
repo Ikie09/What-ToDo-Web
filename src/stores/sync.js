@@ -6,7 +6,7 @@ const QUEUE_KEY = 'sync_queue'
 const TEMP_ID_KEY = 'sync_temp_id_counter'
 
 // Queue entry kinds map to the arrays accepted by POST /sync/push.
-const KIND_TO_FIELD = { todo: 'todos', note: 'notes', meeting: 'meetings' }
+const KIND_TO_FIELD = { todo: 'todos', note: 'notes', meeting: 'meetings', transaction: 'transactions', budget: 'budgets' }
 
 function loadQueue() {
     return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]')
@@ -78,7 +78,7 @@ export const useSyncStore = defineStore('sync', {
 
             this.syncing = true
             try {
-                const body = { todos: [], notes: [], meetings: [] }
+                const body = { todos: [], notes: [], meetings: [], transactions: [], budgets: [] }
                 for (const q of this.queue) body[KIND_TO_FIELD[q.kind]].push(q.dto)
 
                 const { data } = await api.post('/sync/push', body)

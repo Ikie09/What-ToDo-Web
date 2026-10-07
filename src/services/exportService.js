@@ -4,12 +4,16 @@ import { useTodosStore, STATUSES, STATUS_LABELS } from '../stores/todos'
 import { useNotesStore } from '../stores/notes'
 import { useMeetingsStore } from '../stores/meetings'
 import { useCategoriesStore } from '../stores/categories'
+import { useTransactionsStore } from '../stores/transactions'
+import { useBudgetsStore } from '../stores/budgets'
+import { useCurrency } from '../composables/useCurrency'
 import { dueDateToInput, inputToDueDate, formatDateTime } from '../utils/dates'
+import { toCents, fromCents, summarize, budgetProgress, currentMonthKey, monthLabel } from '../utils/finance'
 
 const PRIORITIES = ['Low', 'Medium', 'High']
 const MAX_IMPORT_ROWS = 5000
 
-function download(filename, blob) {
+export function download(filename, blob) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -20,7 +24,7 @@ function download(filename, blob) {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-function stamp() {
+export function stamp() {
     return new Date().toISOString().slice(0, 10)
 }
 
@@ -29,8 +33,13 @@ async function loadAll() {
     const notes = useNotesStore()
     const meetings = useMeetingsStore()
     const categories = useCategoriesStore()
-    await Promise.all([todos.fetchAll(), notes.fetchAll(), meetings.fetchAll(), categories.fetchAll()])
-    return { todos, notes, meetings, categories }
+    const transactions = useTransactionsStore()
+    const budgets = useBudgetsStore()
+    await Promise.all([
+        todos.fetchAll(), notes.fetchAll(), meetings.fetchAll(), categories.fetchAll(),
+        transactions.fetchAll(), budgets.fetchAll()
+    ])
+    return { todos, notes, meetings, categories, transactions, budgets }
 }
 
 async function refreshStores() {
@@ -41,10 +50,10 @@ async function refreshStores() {
 // ---------------------------------------------------------------- JSON backup
 
 export async function exportJson() {
-    const { todos, notes, meetings, categories } = await loadAll()
+    const { todos, notes, meetings, categories, transactions, budgets } = await loadAll()
     const backup = {
         app: 'what-to-do',
-        version: 1,
+        version: 2,
         exportedAt: new Date().toISOString(),
         categories: categories.items.map(c => ({ name: c.name, color: c.color })),
         todos: todos.items.map(t => ({
@@ -54,8 +63,13 @@ export async function exportJson() {
             sortOrder: t.sortOrder,
             priority: t.priority,
             dueDate: t.dueDate ?? null,
-            category: t.categoryName ?? null
+            category: t.categoryName ?? null,
+            completedAt: t.completedAt ?? null
         })),
+        transactions: transactions.items.map(t => ({
+            type: t.type, amount: t.amount, category: t.category, note: t.note ?? null, date: t.date
+        })),
+        budgets: budgets.items.map(b => ({ category: b.category, monthlyLimit: b.monthlyLimit })),
         notes: notes.items.map(n => ({ title: n.title, body: n.body ?? null })),
         meetings: meetings.items.map(m => ({
             title: m.title,
@@ -67,11 +81,26 @@ export async function exportJson() {
         }))
     }
     download(`what-to-do-backup-${stamp()}.json`, new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }))
-    return { todos: backup.todos.length, notes: backup.notes.length, meetings: backup.meetings.length }
+    return {
+        todos: backup.todos.length,
+        notes: backup.notes.length,
+        meetings: backup.meetings.length,
+        transactions: backup.transactions.length,
+        budgets: backup.budgets.length
+    }
 }
 
 function clean(value, max) {
     return typeof value === 'string' ? value.slice(0, max) : null
+}
+
+// "YYYY-MM-DD" that is a real calendar day (2026-13-45 and 2026-02-30 are rejected, not rolled over).
+function isRealDay(value) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '')
+    if (!m) return false
+    const [y, mo, d] = m.slice(1).map(Number)
+    const date = new Date(Date.UTC(y, mo - 1, d))
+    return date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d
 }
 
 function validIso(value) {
@@ -90,7 +119,10 @@ export async function importJson(file) {
     if (data?.app !== 'what-to-do' || !Array.isArray(data.todos) || !Array.isArray(data.notes) || !Array.isArray(data.meetings)) {
         throw new Error('That does not look like a What To Do backup.')
     }
-    if (data.todos.length + data.notes.length + data.meetings.length > MAX_IMPORT_ROWS) {
+    // Backups made before budgeting existed simply have no transactions/budgets.
+    const txRows = Array.isArray(data.transactions) ? data.transactions : []
+    const budgetRows = Array.isArray(data.budgets) ? data.budgets : []
+    if (data.todos.length + data.notes.length + data.meetings.length + txRows.length + budgetRows.length > MAX_IMPORT_ROWS) {
         throw new Error(`Backups are limited to ${MAX_IMPORT_ROWS} items.`)
     }
 
@@ -110,9 +142,29 @@ export async function importJson(file) {
             priority: PRIORITIES.includes(t.priority) ? t.priority : 'Medium',
             dueDate: t.dueDate ? validIso(t.dueDate) : null,
             categoryId: categoryByName.get(String(t.category || '').toLowerCase()) ?? null,
+            completedAt: t.status === 'Done' ? (t.completedAt && validIso(t.completedAt)) || now : null,
             updatedAt: now,
             isDeleted: false
         })),
+        transactions: txRows.filter(validTransaction).map(t => ({
+            id: tempId(),
+            type: t.type,
+            amount: Math.round(Number(t.amount) * 100) / 100,
+            category: clean(t.category, 100).trim(),
+            note: clean(t.note, 500),
+            date: asDay(validIso(t.date)),
+            updatedAt: now,
+            isDeleted: false
+        })),
+        budgets: budgetRows
+            .filter(b => clean(b.category, 100)?.trim() && Number(b.monthlyLimit) >= 0 && Number.isFinite(Number(b.monthlyLimit)))
+            .map(b => ({
+                id: tempId(),
+                category: clean(b.category, 100).trim(),
+                monthlyLimit: Number(b.monthlyLimit),
+                updatedAt: now,
+                isDeleted: false
+            })),
         notes: data.notes.filter(n => clean(n.title, 255)).map(n => ({
             id: tempId(),
             title: clean(n.title, 255),
@@ -137,8 +189,25 @@ export async function importJson(file) {
 
     await api.post('/sync/push', body)
     await refreshStores()
-    return { todos: body.todos.length, notes: body.notes.length, meetings: body.meetings.length }
+    return {
+        todos: body.todos.length,
+        notes: body.notes.length,
+        meetings: body.meetings.length,
+        transactions: body.transactions.length,
+        budgets: body.budgets.length
+    }
 }
+
+// A restored transaction must be well formed; invalid rows are skipped instead of failing the batch.
+function validTransaction(t) {
+    const amount = Number(t?.amount)
+    return (t?.type === 'Income' || t?.type === 'Expense') &&
+        Number.isFinite(amount) && amount > 0 && amount <= 1e12 &&
+        !!clean(t.category, 100)?.trim() && !!validIso(t.date)
+}
+
+// Re-sync dates to date-only (UTC midnight) like the rest of the app.
+const asDay = (iso) => inputToDueDate(dueDateToInput(iso))
 
 // ---------------------------------------------------------------- CSV (todos)
 
@@ -225,7 +294,7 @@ export async function importTodosCsv(file) {
             status,
             sortOrder: todos.length,
             priority,
-            dueDate: /^\d{4}-\d{2}-\d{2}$/.test(due) ? inputToDueDate(due) : null,
+            dueDate: isRealDay(due) ? inputToDueDate(due) : null,
             categoryId: categoryByName.get(get('category').toLowerCase()) ?? null,
             updatedAt: now,
             isDeleted: false
@@ -272,7 +341,7 @@ function writeBlock(doc, text, y, { size = 11, bold = false, color = '#0F2A21', 
 }
 
 export async function exportPdf(kind) {
-    const { todos, notes, meetings } = await loadAll()
+    const { todos, notes, meetings, transactions, budgets } = await loadAll()
 
     if (kind === 'todos') {
         const { doc, autoTable, y } = await newPdf('Todos')
@@ -316,5 +385,101 @@ export async function exportPdf(kind) {
         return meetings.items.length
     }
 
+    if (kind === 'budget') {
+        const key = currentMonthKey()
+        // jsPDF's built-in fonts only cover Latin text, so amounts use the ISO code (USD 1,234.00), not a symbol.
+        const { currency } = useCurrency()
+        const formatter = new Intl.NumberFormat(navigator.language, { style: 'currency', currency: currency.value, currencyDisplay: 'code' })
+        const money = (cents) => formatter.format(fromCents(cents)).replace(/ /g, ' ')
+
+        const { doc, autoTable, y: startY } = await newPdf(`Budget report · ${monthLabel(key)}`)
+        const s = summarize(transactions.items, key)
+        let y = writeBlock(doc, `Income ${money(s.incomeCents)}   Expenses ${money(s.expenseCents)}   Net ${money(s.netCents)}`, startY, { size: 12, bold: true })
+
+        const progress = budgetProgress(budgets.items, transactions.items, key)
+        if (progress.length) {
+            autoTable(doc, {
+                startY: y,
+                head: [['Category', 'Spent', 'Limit', 'Remaining']],
+                body: progress.map(p => [p.category, money(p.spentCents), money(p.limitCents), money(p.remainingCents)]),
+                styles: { font: 'helvetica', fontSize: 9, cellPadding: 6 },
+                headStyles: { fillColor: [26, 111, 88] },
+                alternateRowStyles: { fillColor: [236, 248, 243] },
+                margin: { left: 48, right: 48 }
+            })
+            y = doc.lastAutoTable.finalY + 24
+        }
+
+        const rows = transactions.sorted.filter(t => t.date.slice(0, 7) === key)
+        autoTable(doc, {
+            startY: y,
+            head: [['Date', 'Type', 'Category', 'Note', 'Amount']],
+            body: rows.map(t => [t.date.slice(0, 10), t.type, t.category, t.note || '', money(toCents(t.amount))]),
+            styles: { font: 'helvetica', fontSize: 9, cellPadding: 6 },
+            headStyles: { fillColor: [26, 111, 88] },
+            alternateRowStyles: { fillColor: [236, 248, 243] },
+            columnStyles: { 4: { halign: 'right' } },
+            margin: { left: 48, right: 48 }
+        })
+        doc.save(`what-to-do-budget-${key}.pdf`)
+        return rows.length
+    }
+
     throw new Error(`Unknown export: ${kind}`)
+}
+
+// ---------------------------------------------------------------- CSV (transactions)
+
+const TX_HEADERS = ['date', 'type', 'amount', 'category', 'note']
+
+export async function exportTransactionsCsv() {
+    const { transactions } = await loadAll()
+    const rows = transactions.sorted.map(t => [t.date.slice(0, 10), t.type, t.amount, t.category, t.note])
+    const csv = [TX_HEADERS, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n')
+    download(`what-to-do-transactions-${stamp()}.csv`, new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' }))
+    return rows.length
+}
+
+export async function importTransactionsCsv(file) {
+    const rows = parseCsv((await file.text()).replace(/^﻿/, ''))
+    if (rows.length < 2) throw new Error('The CSV has no rows to import.')
+    if (rows.length - 1 > MAX_IMPORT_ROWS) throw new Error(`CSV imports are limited to ${MAX_IMPORT_ROWS} rows.`)
+
+    const header = rows[0].map(h => h.trim().toLowerCase())
+    for (const required of ['date', 'type', 'amount', 'category']) {
+        if (!header.includes(required)) throw new Error(`The CSV needs a “${required}” column.`)
+    }
+    const col = (name) => header.indexOf(name)
+    const now = new Date().toISOString()
+
+    const items = []
+    let skipped = 0
+    for (const r of rows.slice(1)) {
+        const get = (name) => (col(name) === -1 ? '' : (r[col(name)] || '').trim())
+        const type = ['Income', 'Expense'].find(t => t.toLowerCase() === get('type').toLowerCase())
+        // "1,234.50" and "$12" both parse; anything else is skipped rather than guessed.
+        const amount = Math.round(parseFloat(get('amount').replace(/[^0-9.\-]/g, '')) * 100) / 100
+        const date = get('date')
+        const category = get('category').replace(/^'(?=[=+\-@])/, '').slice(0, 100)
+
+        if (!type || !(amount > 0) || amount > 1e12 || !category || !isRealDay(date)) {
+            skipped++
+            continue
+        }
+        items.push({
+            id: tempId(),
+            type,
+            amount,
+            category,
+            note: get('note').replace(/^'(?=[=+\-@])/, '').slice(0, 500) || null,
+            date: inputToDueDate(date),
+            updatedAt: now,
+            isDeleted: false
+        })
+    }
+
+    if (items.length === 0) throw new Error('No valid rows were found (needs date YYYY-MM-DD, type Income/Expense, amount, category).')
+    await api.post('/sync/push', { transactions: items })
+    await refreshStores()
+    return skipped ? { transactions: items.length, skipped } : items.length
 }

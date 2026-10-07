@@ -9,13 +9,23 @@ export const STATUSES = ['Todo', 'InProgress', 'Done']
 export const STATUS_LABELS = { Todo: 'To do', InProgress: 'In progress', Done: 'Done' }
 
 // Older cached rows and server rows from before the Kanban upgrade have no status.
+// completedAt follows the status: stamped when a todo becomes Done (also for offline edits), cleared on reopen.
 function normalize(t) {
     const status = t.status || (t.isCompleted ? 'Done' : 'Todo')
-    return { ...t, status, isCompleted: status === 'Done', sortOrder: t.sortOrder ?? 0 }
+    const done = status === 'Done'
+    return {
+        ...t,
+        status,
+        isCompleted: done,
+        sortOrder: t.sortOrder ?? 0,
+        completedAt: done ? t.completedAt || new Date().toISOString() : null
+    }
 }
 
 function loadCache() {
-    return JSON.parse(localStorage.getItem(CACHE_KEY) || '[]').map(normalize)
+    return JSON.parse(localStorage.getItem(CACHE_KEY) || '[]').map(row =>
+        // Rows cached before completedAt existed: the last update is the best estimate.
+        normalize(row.status === 'Done' && !row.completedAt ? { ...row, completedAt: row.updatedAt } : row))
 }
 
 export const useTodosStore = defineStore('todos', {
@@ -73,6 +83,7 @@ export const useTodosStore = defineStore('todos', {
                 priority: todo.priority,
                 dueDate: todo.dueDate ?? null,
                 categoryId: todo.categoryId ?? null,
+                completedAt: todo.status === 'Done' ? todo.completedAt ?? null : null,
                 updatedAt: new Date().toISOString(),
                 isDeleted: !!todo.isDeleted
             }
@@ -157,6 +168,7 @@ export const useTodosStore = defineStore('todos', {
                     if (todo && (todo.status !== status || todo.sortOrder !== index)) {
                         todo.status = status
                         todo.isCompleted = status === 'Done'
+                        todo.completedAt = todo.isCompleted ? todo.completedAt || new Date().toISOString() : null
                         todo.sortOrder = index
                         changes.push({ id, status, sortOrder: index })
                     }

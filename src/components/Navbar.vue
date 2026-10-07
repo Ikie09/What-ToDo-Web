@@ -14,6 +14,10 @@
                 </span>
             </span>
 
+            <button type="button" class="icon-btn" aria-label="Open calculator" title="Calculator" @click="calculator.open()">
+                <Calculator :size="20" aria-hidden="true" />
+            </button>
+
             <button
                 type="button"
                 class="icon-btn"
@@ -52,7 +56,8 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
-import { Menu, Sun, Moon, Cloud, CloudOff, ChevronDown, Settings, LogOut } from 'lucide-vue-next'
+import { Menu, Sun, Moon, Cloud, CloudOff, ChevronDown, Settings, LogOut, Calculator } from 'lucide-vue-next'
+import { useCalculator } from '../composables/useCalculator'
 import { useAuthStore } from '../stores/auth'
 import { useSyncStore } from '../stores/sync'
 import { useTheme } from '../composables/useTheme'
@@ -63,6 +68,7 @@ const auth = useAuthStore()
 const sync = useSyncStore()
 const { resolved, toggle } = useTheme()
 const { openMobile } = useShell()
+const calculator = useCalculator()
 
 const pageTitle = computed(() => route.meta.title || 'What To Do')
 const initial = computed(() => (auth.user?.email || '?').charAt(0).toUpperCase())

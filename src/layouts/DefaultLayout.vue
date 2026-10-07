@@ -11,12 +11,15 @@
                 <router-view />
             </main>
         </div>
+
+        <CalculatorPanel />
     </div>
 </template>
 
 <script setup>
 import Sidebar from '../components/Sidebar.vue'
 import Navbar from '../components/Navbar.vue'
+import CalculatorPanel from '../components/CalculatorPanel.vue'
 import { useShell } from '../composables/useShell'
 
 const { collapsed, mobileOpen, closeMobile } = useShell()

@@ -18,6 +18,9 @@ import { useTodosStore } from '../../stores/todos'
 import { useNotesStore } from '../../stores/notes'
 import { useMeetingsStore } from '../../stores/meetings'
 import { useCategoriesStore } from '../../stores/categories'
+import { useTransactionsStore } from '../../stores/transactions'
+import { useBudgetsStore } from '../../stores/budgets'
+import { usePushStore } from '../../stores/push'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -26,7 +29,7 @@ const message = ref('Saving any pending changes first.')
 
 // Per-user data only: theme, sidebar and reminder preferences are kept.
 const USER_KEYS = [
-    'cache_todos', 'cache_notes', 'cache_categories', 'cache_meetings',
+    'cache_todos', 'cache_notes', 'cache_categories', 'cache_meetings', 'cache_transactions', 'cache_budgets',
     'sync_queue', 'sync_last_time', 'sync_temp_id_counter', 'reminders_notified'
 ]
 
@@ -39,10 +42,14 @@ onMounted(async () => {
         }
     }
 
+    // Stop pushing this account's reminders to this browser (needs the token, so before it is cleared).
+    await usePushStore().disable().catch(() => {})
+
     auth.logout()
     USER_KEYS.forEach((key) => localStorage.removeItem(key))
     // Stores re-read their (now empty) cache, so the next account never sees this one's data.
-    ;[useTodosStore(), useNotesStore(), useMeetingsStore(), useCategoriesStore(), sync].forEach((s) => s.$reset())
+    ;[useTodosStore(), useNotesStore(), useMeetingsStore(), useCategoriesStore(), useTransactionsStore(), useBudgetsStore(), sync]
+        .forEach((s) => s.$reset())
     router.replace('/auth/login')
 })
 </script>

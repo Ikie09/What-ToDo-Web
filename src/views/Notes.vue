@@ -5,10 +5,27 @@
                 <h2 class="page-title">Notes</h2>
                 <p class="page-sub">{{ store.items.length }} note{{ store.items.length === 1 ? '' : 's' }}</p>
             </div>
-            <button type="button" class="btn" @click="openCreate">
-                <Plus :size="18" aria-hidden="true" /> New note
-            </button>
+            <div class="header-actions">
+                <button type="button" class="btn btn-secondary" @click="fileInput.click()">
+                    <Upload :size="16" aria-hidden="true" /> Import files
+                </button>
+                <input
+                    ref="fileInput"
+                    type="file"
+                    multiple
+                    accept=".md,.markdown,.txt,.docx"
+                    class="sr-only"
+                    tabindex="-1"
+                    aria-label="Choose Markdown, text or Word files to import as notes"
+                    @change="onImport"
+                />
+                <button type="button" class="btn" @click="openCreate">
+                    <Plus :size="18" aria-hidden="true" /> New note
+                </button>
+            </div>
         </div>
+
+        <p v-if="message" class="status" :class="{ error: messageIsError }" :role="messageIsError ? 'alert' : 'status'">{{ message }}</p>
 
         <div class="search">
             <Search :size="16" aria-hidden="true" />
@@ -33,6 +50,7 @@
                 <header>
                     <h3>{{ n.title }}</h3>
                     <div class="note-actions">
+                        <ExportMenu :label="`Export “${n.title}”`" :items="exportItems(n)" @error="showError" />
                         <button type="button" class="icon-btn" :aria-label="`Edit “${n.title}”`" @click="openEdit(n)">
                             <Pencil :size="16" aria-hidden="true" />
                         </button>
@@ -56,7 +74,10 @@
                     <label for="n-body">Note</label>
                     <textarea id="n-body" ref="bodyEl" v-model="form.body" rows="8" placeholder="Write or dictate…"></textarea>
                 </div>
-                <DictateButton @transcript="onTranscript" />
+                <div class="speech-tools">
+                    <DictateButton @transcript="onTranscript" />
+                    <TranscribeButton @transcript="onTranscript" />
+                </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" @click="modalOpen = false">Cancel</button>
                     <button type="submit" class="btn">{{ editing ? 'Save changes' : 'Add note' }}</button>
@@ -68,15 +89,46 @@
 
 <script setup>
 import { reactive, ref, computed, nextTick, onMounted } from 'vue'
-import { Plus, Search, Pencil, Trash2, StickyNote } from 'lucide-vue-next'
+import { Plus, Search, Pencil, Trash2, StickyNote, Upload, FileText, FileType } from 'lucide-vue-next'
 import AppModal from '../components/AppModal.vue'
 import EmptyState from '../components/EmptyState.vue'
 import DictateButton from '../components/DictateButton.vue'
+import ExportMenu from '../components/ExportMenu.vue'
+import TranscribeButton from '../components/TranscribeButton.vue'
 import { useNotesStore } from '../stores/notes'
+import { exportNote, importDocuments } from '../services/documentService'
 import { formatDateTime } from '../utils/dates'
 import { insertAtCursor } from '../utils/text'
 
 const store = useNotesStore()
+
+const fileInput = ref(null)
+const message = ref('')
+const messageIsError = ref(false)
+
+const exportItems = (note) => [
+    { label: 'Markdown (.md)', icon: FileText, run: () => exportNote(note, 'md') },
+    { label: 'Word (.docx)', icon: FileType, run: () => exportNote(note, 'docx') }
+]
+
+function showError(text) {
+    messageIsError.value = true
+    message.value = text
+}
+
+async function onImport(event) {
+    const files = event.target.files
+    message.value = ''
+    try {
+        const result = await importDocuments(files)
+        messageIsError.value = false
+        message.value = `Imported ${result.notes} note${result.notes === 1 ? '' : 's'}${result.skipped ? `. Skipped ${result.skipped}: ${result.details}` : '.'}`
+    } catch (err) {
+        showError(err.message || 'Import failed.')
+    } finally {
+        event.target.value = ''
+    }
+}
 const search = ref('')
 const modalOpen = ref(false)
 const editing = ref(null)
@@ -125,6 +177,17 @@ async function remove(note) {
 </script>
 
 <style scoped>
+.header-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+
+.status {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.88rem;
+    color: var(--primary-text);
+    background: var(--primary-soft);
+    border-radius: var(--radius-sm);
+}
+.status.error { color: var(--danger); background: var(--danger-soft); }
+
 .search { position: relative; max-width: 360px; }
 .search svg { position: absolute; left: 0.7rem; top: 50%; transform: translateY(-50%); color: var(--text-faint); pointer-events: none; }
 .search input { padding-left: 2.2rem; }
@@ -153,6 +216,8 @@ async function remove(note) {
 }
 
 .stamp { font-size: 0.75rem; color: var(--text-faint); }
+
+.speech-tools { display: flex; flex-direction: column; gap: 0.6rem; }
 
 .form { display: flex; flex-direction: column; gap: 0.9rem; }
 .form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }

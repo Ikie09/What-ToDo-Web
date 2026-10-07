@@ -74,6 +74,7 @@
                             <p v-if="selected.location" class="muted loc"><MapPin :size="14" aria-hidden="true" /> {{ selected.location }}</p>
                         </div>
                         <div class="detail-actions">
+                            <ExportMenu :label="`Export “${selected.title}”`" :items="exportItems" @error="exportError = $event" />
                             <button type="button" class="icon-btn" :aria-label="`Edit “${selected.title}”`" @click="openEdit(selected)">
                                 <Pencil :size="16" aria-hidden="true" />
                             </button>
@@ -83,6 +84,7 @@
                         </div>
                     </header>
 
+                    <p v-if="exportError" class="form-error" role="alert">{{ exportError }}</p>
                     <p v-if="selected.description" class="description">{{ selected.description }}</p>
 
                     <div class="notes">
@@ -99,7 +101,10 @@
                             @input="scheduleSave"
                             @blur="saveNow"
                         ></textarea>
-                        <DictateButton @transcript="onTranscript" />
+                        <div class="speech-tools">
+                            <DictateButton @transcript="onTranscript" />
+                            <TranscribeButton @transcript="onTranscript" />
+                        </div>
                     </div>
                 </template>
             </section>
@@ -141,10 +146,13 @@
 
 <script setup>
 import { reactive, ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { Plus, MapPin, Pencil, Trash2, CalendarDays, NotebookPen } from 'lucide-vue-next'
+import { Plus, MapPin, Pencil, Trash2, CalendarDays, NotebookPen, FileText, FileType } from 'lucide-vue-next'
 import AppModal from '../components/AppModal.vue'
 import EmptyState from '../components/EmptyState.vue'
 import DictateButton from '../components/DictateButton.vue'
+import ExportMenu from '../components/ExportMenu.vue'
+import TranscribeButton from '../components/TranscribeButton.vue'
+import { exportMeeting } from '../services/documentService'
 import { useMeetingsStore } from '../stores/meetings'
 import { formatTime, formatDay, toLocalInput, fromLocalInput, startOfLocalDay } from '../utils/dates'
 import { insertAtCursor } from '../utils/text'
@@ -192,6 +200,15 @@ const groups = computed(() => {
         { key: 'past', label: 'Past', items: buckets.past }
     ].filter(g => g.items.length > 0)
 })
+
+// ---- Export ------------------------------------------------------------------------------------
+const exportError = ref('')
+
+// Exports what is on screen, including notes that have not finished autosaving.
+const exportItems = computed(() => [
+    { label: 'Markdown (.md)', icon: FileText, run: () => { exportError.value = ''; return exportMeeting({ ...selected.value, meetingNotes: draft.value }, 'md') } },
+    { label: 'Word (.docx)', icon: FileType, run: () => { exportError.value = ''; return exportMeeting({ ...selected.value, meetingNotes: draft.value }, 'docx') } }
+])
 
 // ---- Meeting notes editor (autosave) -------------------------------------------------------
 const draft = ref('')
@@ -367,6 +384,7 @@ async function remove(m) {
 .description { color: var(--text-muted); white-space: pre-wrap; }
 
 .notes { display: flex; flex-direction: column; gap: 0.5rem; }
+.speech-tools { display: flex; flex-direction: column; gap: 0.6rem; }
 .notes-head { display: flex; align-items: center; justify-content: space-between; }
 .notes-head label { font-size: 0.85rem; font-weight: 700; }
 .save-state { font-size: 0.78rem; color: var(--text-muted); }

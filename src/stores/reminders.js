@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { useTodosStore } from './todos'
 import { useMeetingsStore } from './meetings'
 import { useAuthStore } from './auth'
+import { usePushStore } from './push'
 import { dueDateToInput, localToday } from '../utils/dates'
 
 const ENABLED_KEY = 'reminders_enabled'
@@ -55,9 +56,12 @@ export const useRemindersStore = defineStore('reminders', {
         setLeadMinutes(minutes) {
             this.leadMinutes = minutes
             localStorage.setItem(LEAD_KEY, String(minutes))
+            // The server uses the same lead time for push reminders on this device.
+            usePushStore().syncSettings()
         },
 
-        // Timers only run while the app (or installed PWA) is open — closed-app delivery needs Web Push.
+        // Timers only run while the app is open. When this device has push turned on, the server
+        // sends the reminders (also when the app is closed), so the timer stays quiet to avoid doubles.
         start() {
             if (timer) return
             this.check()
@@ -73,6 +77,7 @@ export const useRemindersStore = defineStore('reminders', {
             if (!this.supported) return
             this.permission = Notification.permission
             if (!this.active || !useAuthStore().isAuthenticated) return
+            if (usePushStore().active) return
 
             const notified = new Set(loadNotified())
             const fresh = []

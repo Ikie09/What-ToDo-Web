@@ -12,6 +12,8 @@ const routes = [
             { path: 'todos', name: 'todos', component: () => import('../views/Todos.vue'), meta: { title: 'Todos' } },
             { path: 'meetings', name: 'meetings', component: () => import('../views/Meetings.vue'), meta: { title: 'Meetings' } },
             { path: 'notes', name: 'notes', component: () => import('../views/Notes.vue'), meta: { title: 'Notes' } },
+            { path: 'budget', name: 'budget', component: () => import('../views/Budget.vue'), meta: { title: 'Budget' } },
+            { path: 'insights', name: 'insights', component: () => import('../views/Insights.vue'), meta: { title: 'Insights' } },
             { path: 'settings', name: 'settings', component: () => import('../views/Settings.vue'), meta: { title: 'Settings' } }
         ]
     },
